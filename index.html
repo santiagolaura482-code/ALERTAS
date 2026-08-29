@@ -991,6 +991,7 @@ let directorioEv = new Map(); // codigo (Ruta/EV) -> {tel, nombre}
 let checklist = [];         // array de registros del checklist del día
 let checklistIndex = new Map(); // nombre normalizado -> registro
 let ventasIndex = new Map(); // codigo cliente (Solicit.) -> {cajas, monto, ruta, ppp, direccion, solicitante, fecha}
+let ventasSource = 'default'; // 'default' | 'custom'
 let agendaDia = new Map(); // codigo de ruta -> {telefono, chofer}
 
 /* ============ UTILIDADES ============ */
@@ -1600,15 +1601,50 @@ function lookupChecklistPorCliente(nombre){
 const LS_VENTAS_KEY = 'rechazos_ventas_v1';
 
 function loadVentas(){
+  // Se muestra el valor por defecto de inmediato; si hay uno personalizado guardado
+  // (en IndexedDB, con más espacio que localStorage), se reemplaza en cuanto esté listo.
+  ventasIndex = new Map(VENTAS_DEFAULT);
+  ventasSource = 'default';
+  updateVentasStatus();
+  tryLoadVentasPersonalizado();
+}
+async function tryLoadVentasPersonalizado(){
   try{
     const raw = localStorage.getItem(LS_VENTAS_KEY);
-    const arr = raw ? JSON.parse(raw) : VENTAS_DEFAULT;
-    ventasIndex = new Map(arr);
-  }catch(e){ ventasIndex = new Map(); }
-  updateVentasStatus();
+    if(raw){
+      const arr = JSON.parse(raw);
+      ventasIndex = new Map(arr);
+      ventasSource = 'custom';
+      updateVentasStatus();
+      idbSet('ventas_custom', arr)
+        .then(()=>{ try{ localStorage.removeItem(LS_VENTAS_KEY); }catch(e){} })
+        .catch(()=>{});
+      return;
+    }
+  }catch(e){ /* seguir con IndexedDB */ }
+  try{
+    const arr = await idbGet('ventas_custom');
+    if(arr && arr.length){
+      ventasIndex = new Map(arr);
+      ventasSource = 'custom';
+      updateVentasStatus();
+    }
+  }catch(e){ console.warn('No se pudo leer el reporte de ventas guardado', e); }
 }
-function saveVentas(){
-  localStorage.setItem(LS_VENTAS_KEY, JSON.stringify(Array.from(ventasIndex.entries())));
+async function saveVentas(){
+  const arr = Array.from(ventasIndex.entries());
+  ventasSource = 'custom';
+  try{
+    await idbSet('ventas_custom', arr);
+  }catch(e){
+    console.warn('No se pudo guardar ventas en IndexedDB, se intenta localStorage', e);
+    try{
+      localStorage.setItem(LS_VENTAS_KEY, JSON.stringify(arr));
+    }catch(e2){
+      toast('El reporte es muy grande para guardarse en este navegador; se usará solo en esta sesión.');
+      console.warn(e2);
+    }
+  }
   updateVentasStatus();
 }
 function updateVentasStatus(){
@@ -1617,7 +1653,7 @@ function updateVentasStatus(){
     if(!ventasIndex.size){
       el.textContent = 'Sin datos cargados todavía — los campos "Cajas" y "Monto" no se autocompletarán.';
     } else {
-      const origen = localStorage.getItem(LS_VENTAS_KEY) ? 'archivo cargado manualmente' : 'archivo original incluido en el sistema';
+      const origen = ventasSource === 'custom' ? 'archivo cargado manualmente' : 'archivo original incluido en el sistema';
       const fechas = Array.from(new Set(Array.from(ventasIndex.values()).map(v=>v.fecha).filter(Boolean)));
       el.textContent = `${ventasIndex.size.toLocaleString('es-PE')} clientes con ventas cargadas${fechas.length ? ' — fecha: '+fechas.join(', ') : ''} — fuente: ${origen}.`;
     }
@@ -2575,7 +2611,12 @@ function showImportPreview(containerId, fileName, detail, onConfirm){
   `;
   el.style.display = 'block';
   el.querySelector('[data-action="confirm"]').addEventListener('click', ()=>{
-    onConfirm();
+    try{
+      onConfirm();
+    }catch(err){
+      console.error(err);
+      toast('Ocurrió un error al guardar. Revisa la consola para más detalle.');
+    }
     hideImportPreview(containerId);
   });
   el.querySelector('[data-action="cancel"]').addEventListener('click', ()=>{
@@ -2847,9 +2888,10 @@ function handleVentasFile(file){
   reader.readAsBinaryString(file);
 }
 
-document.getElementById('btnBorrarVentas').addEventListener('click', ()=>{
+document.getElementById('btnBorrarVentas').addEventListener('click', async ()=>{
   if(!confirm('¿Restaurar el reporte de ventas al archivo original incluido en el sistema?')) return;
   localStorage.removeItem(LS_VENTAS_KEY);
+  try{ await idbDelete('ventas_custom'); }catch(e){ console.warn(e); }
   loadVentas();
   toast('Reporte de ventas restaurado al original.');
   refreshDerivedFields();

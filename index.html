@@ -1053,7 +1053,7 @@ const LS_USUARIOS_KEY = 'rechazos_usuarios_v1';
 const LS_SESION_KEY = 'rechazos_sesion_v1';
 const ADMIN_DEFAULT = { usuario:'admin', nombre:'Administrador', rol:'admin', passwordHash:'240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9' };
 const ROLES_LABEL = { admin:'Admin - Supervisor Distribución', monitor:'Monitor - Alertista' };
-const PAGINAS_RESTRINGIDAS_MONITOR = ['maestro','directorio','usuarios'];
+const PAGINAS_RESTRINGIDAS_MONITOR = ['maestro','usuarios'];
 
 /* SHA-256 puro en JS (dominio público, adaptado) — respaldo para cuando crypto.subtle
    no está disponible (por ejemplo, al abrir el archivo directo sin contexto seguro). */
@@ -1229,7 +1229,10 @@ function renderUsuarios(){
       <td>${escapeHtml(u.usuario)}</td>
       <td>${escapeHtml(u.nombre||'')}</td>
       <td>${escapeHtml(ROLES_LABEL[u.rol] || u.rol || '—')}</td>
-      <td><span class="btn-danger btn" style="padding:5px 10px; font-size:11px;" data-del-usuario="${escapeHtml(u.usuario)}">Eliminar</span></td>
+      <td style="white-space:nowrap;">
+        <span class="btn btn-secondary" style="padding:5px 10px; font-size:11px;" data-edit-usuario="${escapeHtml(u.usuario)}">Editar</span>
+        <span class="btn-danger btn" style="padding:5px 10px; font-size:11px;" data-del-usuario="${escapeHtml(u.usuario)}">Eliminar</span>
+      </td>
     </tr>
   `).join('');
   document.getElementById('usuariosTbody').querySelectorAll('[data-del-usuario]').forEach(btn=>{
@@ -1241,6 +1244,79 @@ function renderUsuarios(){
       renderUsuarios();
       toast('Usuario eliminado.');
     });
+  });
+  document.getElementById('usuariosTbody').querySelectorAll('[data-edit-usuario]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openEditarUsuarioModal(btn.dataset.editUsuario));
+  });
+}
+
+function openEditarUsuarioModal(usuarioKey){
+  const usuarios = loadUsuarios();
+  const u = usuarios.find(x => x.usuario === usuarioKey);
+  if(!u) return;
+  openModal(`
+    <div class="modal-header">
+      <div class="mh-title">Editar usuario</div>
+      <span class="modal-close" data-modal-close>&times;</span>
+    </div>
+    <div class="modal-body">
+      <div class="vertical-fields">
+        <div class="field">
+          <label for="editUsuarioNombre">Nombre</label>
+          <input type="text" id="editUsuarioNombre" value="${escapeHtml(u.nombre||'')}">
+        </div>
+        <div class="field">
+          <label for="editUsuarioUsuario">Usuario</label>
+          <input type="text" id="editUsuarioUsuario" value="${escapeHtml(u.usuario)}">
+        </div>
+        <div class="field">
+          <label for="editUsuarioRol">Perfil</label>
+          <select id="editUsuarioRol">
+            <option value="admin"${u.rol==='admin'?' selected':''}>Admin - Supervisor Distribución</option>
+            <option value="monitor"${u.rol==='monitor'?' selected':''}>Monitor - Alertista</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="editUsuarioPassword">Nueva contraseña <span class="hint">— déjalo en blanco para no cambiarla</span></label>
+          <input type="password" id="editUsuarioPassword" placeholder="••••••••" autocomplete="new-password">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" data-modal-close>Cancelar</button>
+      <button class="btn" id="btnGuardarEdicionUsuario">Guardar cambios</button>
+    </div>
+  `);
+  document.getElementById('btnGuardarEdicionUsuario').addEventListener('click', async ()=>{
+    const nuevoNombre = document.getElementById('editUsuarioNombre').value.trim();
+    const nuevoUsuario = document.getElementById('editUsuarioUsuario').value.trim();
+    const nuevoRol = document.getElementById('editUsuarioRol').value;
+    const nuevaPassword = document.getElementById('editUsuarioPassword').value;
+    if(!nuevoUsuario){ toast('El usuario no puede quedar vacío.'); return; }
+    const listaActual = loadUsuarios();
+    if(listaActual.some(x => x.usuario.toLowerCase() === nuevoUsuario.toLowerCase() && x.usuario !== usuarioKey)){
+      toast('Ya existe otro usuario con ese nombre.');
+      return;
+    }
+    const idx = listaActual.findIndex(x => x.usuario === usuarioKey);
+    if(idx === -1) return;
+    listaActual[idx].nombre = nuevoNombre;
+    listaActual[idx].usuario = nuevoUsuario;
+    listaActual[idx].rol = nuevoRol;
+    if(nuevaPassword){
+      listaActual[idx].passwordHash = await sha256(nuevaPassword);
+    }
+    saveUsuarios(listaActual);
+    // Si edité al usuario con sesión activa, refresca su sesión guardada.
+    const sesion = getSesionActual();
+    if(sesion && sesion.usuario === usuarioKey){
+      setSesionActual(nuevoUsuario, nuevoNombre, nuevoRol);
+      document.getElementById('sidebarUserName').textContent = nuevoNombre || nuevoUsuario;
+      aplicarPermisosRol(nuevoRol);
+    }
+    closeModal();
+    renderUsuarios();
+    toast('Usuario actualizado.');
   });
 }
 document.getElementById('btnAgregarUsuario').addEventListener('click', async ()=>{

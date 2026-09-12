@@ -425,6 +425,13 @@
   .map-client-result .mc-name{ font-weight:600; color:var(--text); }
   .map-client-result .mc-meta{ font-size:11px; color:var(--text-dim); margin-top:2px; }
   .map-client-empty{ padding:12px; font-size:12px; color:var(--text-dim); text-align:center; }
+  .map-fs-btn.active{ background:var(--amber); color:#1a1305; border-color:var(--amber); }
+  .rutas-sel-bar{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:rgba(245,166,35,.1); border:1px solid var(--amber-dim);
+    border-radius:8px; padding:8px 12px; margin-bottom:12px; font-size:12.5px; color:var(--text);
+  }
+  .rutas-sel-bar span{ font-weight:600; margin-right:auto; }
 
   .map-legends{ display:block; }
   .map-legend-title{ font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--text-dim); margin-bottom:8px; }
@@ -907,12 +914,18 @@
             <button type="button" class="msel-btn" id="rutasRutaFilterBtn">Todas las rutas</button>
             <div class="msel-panel" id="rutasRutaFilterPanel"></div>
           </div>
+          <button type="button" id="rutasSelModeBtn" class="map-fs-btn" title="Selecciona clientes en el mapa haciendo clic sobre ellos">🔲 Agrupar clientes</button>
           <button type="button" id="rutasMapExpandBtn" class="map-fs-btn" title="Ver el mapa en pantalla completa">⛶ Pantalla completa</button>
           <button type="button" id="rutasMapCollapseBtn" class="map-fs-btn" title="Volver al tamaño normal" style="display:none;">✕ Restaurar</button>
         </div>
         <div class="map-client-search" id="rutasClientSearchWrap">
           <input type="text" id="rutasClientSearch" placeholder="Buscar cliente por código o nombre...">
           <div class="map-client-results" id="rutasClientResults"></div>
+        </div>
+        <div id="rutasSelBar" class="rutas-sel-bar" style="display:none;">
+          <span id="rutasSelCount">0 clientes seleccionados</span>
+          <button type="button" class="btn btn-secondary" id="rutasSelVerListaBtn" style="padding:6px 12px; font-size:12px;">Ver lista</button>
+          <button type="button" class="btn btn-danger" id="rutasSelLimpiarBtn" style="padding:6px 12px; font-size:12px;">Limpiar selección</button>
         </div>
         <div id="rutasMapDiv"></div>
         <div class="map-legends">
@@ -3017,6 +3030,128 @@ function renderTablaRutas(filas){
 
 /* Muestra en el mapa lo programado para una ruta (clic en "🗺 Mapa" de una fila),
    SIN tocar los filtros ni la tabla de "Detalle por ruta". */
+/* ============ AGRUPAR CLIENTES EN EL MAPA (selección → lista con Código y Cantidad por UM) ============ */
+let rutasModoSeleccion = false;
+const rutasClientesSeleccionados = new Set();
+
+function estiloMarcadorRuta(fillColor, seleccionado){
+  return seleccionado
+    ? { radius:8, color:'#ffffff', weight:2.5, fillColor, fillOpacity:.95 }
+    : { radius:6, color:'#000000', weight:1.2, fillColor, fillOpacity:.9 };
+}
+function toggleSeleccionClienteRuta(codigo, marker, fillColor){
+  if(rutasClientesSeleccionados.has(codigo)){
+    rutasClientesSeleccionados.delete(codigo);
+  } else {
+    rutasClientesSeleccionados.add(codigo);
+  }
+  marker.setStyle(estiloMarcadorRuta(fillColor, rutasClientesSeleccionados.has(codigo)));
+  actualizarBarraSeleccionRutas();
+}
+function actualizarBarraSeleccionRutas(){
+  const bar = document.getElementById('rutasSelBar');
+  const n = rutasClientesSeleccionados.size;
+  if(rutasModoSeleccion || n > 0){
+    bar.style.display = 'flex';
+    document.getElementById('rutasSelCount').textContent = `${n} cliente(s) seleccionado(s)`;
+  } else {
+    bar.style.display = 'none';
+  }
+}
+document.getElementById('rutasSelModeBtn').addEventListener('click', ()=>{
+  rutasModoSeleccion = !rutasModoSeleccion;
+  document.getElementById('rutasSelModeBtn').classList.toggle('active', rutasModoSeleccion);
+  document.getElementById('rutasSelModeBtn').textContent = rutasModoSeleccion ? '🔲 Modo selección: ON' : '🔲 Agrupar clientes';
+  actualizarBarraSeleccionRutas();
+  if(rutasModoSeleccion) toast('Haz clic sobre los clientes en el mapa para agruparlos.');
+});
+document.getElementById('rutasSelLimpiarBtn').addEventListener('click', ()=>{
+  rutasClientesSeleccionados.clear();
+  rutasMapMarkers.forEach(mm => mm.marker.setStyle(estiloMarcadorRuta(mm.fillColor, false)));
+  actualizarBarraSeleccionRutas();
+});
+document.getElementById('rutasSelVerListaBtn').addEventListener('click', abrirListaClientesAgrupados);
+
+/* Cantidad de cada línea de producto, agrupada por Unidad de Medida (UM), para un cliente. */
+function cantidadPorUmCliente(codigo){
+  const ventasRec = ventasIndex.get(codigo);
+  const porUm = {};
+  if(ventasRec && ventasRec.entregas){
+    ventasRec.entregas.forEach(ent=>{
+      (ent.lineas||[]).forEach(l=>{
+        const um = l.um || '—';
+        porUm[um] = (porUm[um]||0) + (l.cantidad||0);
+      });
+    });
+  }
+  return porUm;
+}
+
+function abrirListaClientesAgrupados(){
+  const codigos = Array.from(rutasClientesSeleccionados);
+  if(!codigos.length){ toast('No has seleccionado ningún cliente en el mapa.'); return; }
+
+  const detalle = codigos.map(codigo=>{
+    const ventasRec = ventasIndex.get(codigo);
+    const groups = maestroIndex.get(codigo);
+    const nombre = (ventasRec && ventasRec.solicitante) || (groups && groups[0] && groups[0].n) || '';
+    const ruta = ventasRec ? ventasRec.ruta : '';
+    return { codigo, nombre, ruta, porUm: cantidadPorUmCliente(codigo) };
+  });
+  const ums = Array.from(new Set(detalle.flatMap(d => Object.keys(d.porUm)))).sort();
+
+  const headHtml = `<th>Código</th><th>Nombre</th><th>Ruta</th>` + ums.map(u=>`<th class="num">${escapeHtml(u)}</th>`).join('') + `<th class="num">Total</th>`;
+  const bodyHtml = detalle.map(d=>{
+    let total = 0;
+    const celdas = ums.map(u=>{
+      const v = d.porUm[u] || 0;
+      total += v;
+      return `<td class="num">${v ? Math.round(v*100)/100 : '—'}</td>`;
+    }).join('');
+    return `<tr><td><b>${escapeHtml(d.codigo)}</b></td><td>${escapeHtml(d.nombre)}</td><td>${escapeHtml(d.ruta||'—')}</td>${celdas}<td class="num"><b>${Math.round(total*100)/100}</b></td></tr>`;
+  }).join('');
+
+  openModal(`
+    <div class="modal-header">
+      <div class="mh-title">Clientes agrupados — Código y cantidad por UM</div>
+      <span class="modal-close" data-modal-close>&times;</span>
+    </div>
+    <div class="modal-body">
+      <div class="route-detail-table-wrap" style="max-height:420px;">
+        <table class="route-detail-table">
+          <thead><tr>${headHtml}</tr></thead>
+          <tbody>${bodyHtml}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" data-modal-close>Cerrar</button>
+      <button class="btn btn-secondary" id="btnCopiarListaAgrupada">Copiar como texto</button>
+      <button class="btn" id="btnExportarListaAgrupada">Exportar Excel</button>
+    </div>
+  `);
+  document.getElementById('btnExportarListaAgrupada').addEventListener('click', ()=>{
+    const headers = ['Codigo','Nombre','Ruta', ...ums, 'Total'];
+    const rows = detalle.map(d=>{
+      let total = 0;
+      const vals = ums.map(u=>{ const v = d.porUm[u]||0; total += v; return Math.round(v*100)/100; });
+      return [d.codigo, d.nombre, d.ruta||'', ...vals, Math.round(total*100)/100];
+    });
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Clientes agrupados');
+    XLSX.writeFile(wb, `clientes_agrupados_${todayISO()}.xlsx`);
+    toast('Descargando Excel…');
+  });
+  document.getElementById('btnCopiarListaAgrupada').addEventListener('click', ()=>{
+    const texto = detalle.map(d=>{
+      const partesUm = ums.map(u=> `${u}: ${Math.round((d.porUm[u]||0)*100)/100}`).join(', ');
+      return `Código: ${d.codigo} | Nombre: ${d.nombre} | Ruta: ${d.ruta||'—'} | ${partesUm}`;
+    }).join('\n');
+    copyToClipboard(texto).then(()=> toast('Copiado al portapapeles.'), ()=> toast('No se pudo copiar.'));
+  });
+}
+
 function mostrarRutaEnMapa(codigo){
   renderMapaRutas(rutasChecklistAgrupado, { salas:new Set(), rutas:new Set([codigo]), busqueda:'' })
     .catch(err=> console.warn('No se pudo cargar el mapa de rutas', err));
@@ -3081,10 +3216,18 @@ async function renderMapaRutas(grupos, filtros){
       if(!m) return;
       const lat = parseFloat(m[1]), lon = parseFloat(m[2]);
       const fillColor = colorForRuta(g.codigo, rutasUnicas);
-      const marker = L.circleMarker([lat, lon], { radius:6, color:'#000000', weight:1.2, fillColor, fillOpacity:.9 })
-        .bindPopup(buildRutaPopupHtml(g.codigo, cliente, groups[0]));
+      const seleccionado = rutasClientesSeleccionados.has(cliente.codigo);
+      const marker = L.circleMarker([lat, lon], estiloMarcadorRuta(fillColor, seleccionado));
+      const popupHtml = buildRutaPopupHtml(g.codigo, cliente, groups[0]);
+      marker.on('click', ()=>{
+        if(rutasModoSeleccion){
+          toggleSeleccionClienteRuta(cliente.codigo, marker, fillColor);
+        } else {
+          marker.bindPopup(popupHtml).openPopup();
+        }
+      });
       marker.addTo(rutasMapInstance);
-      rutasMapMarkers.push({marker, lat, lon});
+      rutasMapMarkers.push({marker, lat, lon, codigo:cliente.codigo, fillColor});
       bounds.push([lat, lon]);
     });
   });
@@ -3275,6 +3418,7 @@ function renderResumenRutas(){
   renderTablaRutas(ordenarFilasRutas(filas));
   renderMapaRutas(rutasChecklistAgrupado, {salas:rutasSalaFilterState, rutas:rutasRutaFilterState, busqueda:''}).catch(err=> console.warn('No se pudo cargar el mapa de rutas', err));
   actualizarStorageInfoRutas();
+  actualizarBarraSeleccionRutas();
 }
 
 

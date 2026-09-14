@@ -915,6 +915,7 @@
             <div class="msel-panel" id="rutasRutaFilterPanel"></div>
           </div>
           <button type="button" id="rutasSelModeBtn" class="map-fs-btn" title="Selecciona clientes en el mapa haciendo clic sobre ellos">🔲 Agrupar clientes</button>
+          <button type="button" id="rutasDrawModeBtn" class="map-fs-btn" title="Traza una zona en el mapa para agrupar a todos los clientes dentro de ella">✏️ Trazar zona</button>
           <button type="button" id="rutasMapExpandBtn" class="map-fs-btn" title="Ver el mapa en pantalla completa">⛶ Pantalla completa</button>
           <button type="button" id="rutasMapCollapseBtn" class="map-fs-btn" title="Volver al tamaño normal" style="display:none;">✕ Restaurar</button>
         </div>
@@ -924,6 +925,7 @@
         </div>
         <div id="rutasSelBar" class="rutas-sel-bar" style="display:none;">
           <span id="rutasSelCount">0 clientes seleccionados</span>
+          <button type="button" class="btn btn-secondary" id="rutasCerrarZonaBtn" style="padding:6px 12px; font-size:12px; display:none;">Cerrar zona</button>
           <button type="button" class="btn btn-secondary" id="rutasSelVerListaBtn" style="padding:6px 12px; font-size:12px;">Ver lista</button>
           <button type="button" class="btn btn-danger" id="rutasSelLimpiarBtn" style="padding:6px 12px; font-size:12px;">Limpiar selección</button>
         </div>
@@ -3046,6 +3048,12 @@ function renderTablaRutas(filas){
 let rutasModoSeleccion = false;
 const rutasClientesSeleccionados = new Set();
 
+/* ---- Trazar zona (polígono) para agrupar de una vez a todos los clientes dentro de ella ---- */
+let rutasDibujoActivo = false;
+let rutasDibujoPuntos = [];      // [[lat,lon], ...]
+let rutasDibujoLineLayer = null; // línea/polígono mientras se traza
+let rutasDibujoCerradoLayer = null; // polígono ya cerrado (se deja visible hasta "Limpiar selección")
+
 function estiloMarcadorRuta(fillColor, seleccionado){
   return seleccionado
     ? { radius:8, color:'#ffffff', weight:2.5, fillColor, fillOpacity:.95 }
@@ -3062,7 +3070,19 @@ function toggleSeleccionClienteRuta(codigo, marker, fillColor){
 }
 function actualizarBarraSeleccionRutas(){
   const bar = document.getElementById('rutasSelBar');
+  const cerrarBtn = document.getElementById('rutasCerrarZonaBtn');
+  const verListaBtn = document.getElementById('rutasSelVerListaBtn');
   const n = rutasClientesSeleccionados.size;
+
+  if(rutasDibujoActivo){
+    bar.style.display = 'flex';
+    document.getElementById('rutasSelCount').textContent = `Trazando zona: ${rutasDibujoPuntos.length} punto(s)`;
+    cerrarBtn.style.display = rutasDibujoPuntos.length >= 3 ? 'inline-flex' : 'none';
+    verListaBtn.style.display = 'none';
+    return;
+  }
+  cerrarBtn.style.display = 'none';
+  verListaBtn.style.display = 'inline-flex';
   if(rutasModoSeleccion || n > 0){
     bar.style.display = 'flex';
     document.getElementById('rutasSelCount').textContent = `${n} cliente(s) seleccionado(s)`;
@@ -3070,16 +3090,85 @@ function actualizarBarraSeleccionRutas(){
     bar.style.display = 'none';
   }
 }
+
+function puntoEnPoligono(lat, lon, poligono){
+  let dentro = false;
+  for(let i=0, j=poligono.length-1; i<poligono.length; j=i++){
+    const [yi, xi] = poligono[i], [yj, xj] = poligono[j];
+    if(((yi > lat) !== (yj > lat)) && (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)){
+      dentro = !dentro;
+    }
+  }
+  return dentro;
+}
+
 document.getElementById('rutasSelModeBtn').addEventListener('click', ()=>{
   rutasModoSeleccion = !rutasModoSeleccion;
+  if(rutasModoSeleccion) desactivarDibujoZona();
   document.getElementById('rutasSelModeBtn').classList.toggle('active', rutasModoSeleccion);
   document.getElementById('rutasSelModeBtn').textContent = rutasModoSeleccion ? '🔲 Modo selección: ON' : '🔲 Agrupar clientes';
   actualizarBarraSeleccionRutas();
   if(rutasModoSeleccion) toast('Haz clic sobre los clientes en el mapa para agruparlos.');
 });
+
+document.getElementById('rutasDrawModeBtn').addEventListener('click', ()=>{
+  if(rutasDibujoActivo){
+    desactivarDibujoZona();
+  } else {
+    rutasModoSeleccion = false;
+    document.getElementById('rutasSelModeBtn').classList.remove('active');
+    document.getElementById('rutasSelModeBtn').textContent = '🔲 Agrupar clientes';
+    rutasDibujoActivo = true;
+    rutasDibujoPuntos = [];
+    document.getElementById('rutasDrawModeBtn').classList.add('active');
+    document.getElementById('rutasDrawModeBtn').textContent = '✏️ Trazando… (toca el mapa)';
+    toast('Toca el mapa para ir marcando los puntos de la zona. Cuando tengas al menos 3, presiona "Cerrar zona".');
+  }
+  actualizarBarraSeleccionRutas();
+});
+function desactivarDibujoZona(){
+  rutasDibujoActivo = false;
+  rutasDibujoPuntos = [];
+  document.getElementById('rutasDrawModeBtn').classList.remove('active');
+  document.getElementById('rutasDrawModeBtn').textContent = '✏️ Trazar zona';
+  if(rutasDibujoLineLayer && rutasMapInstance){ rutasMapInstance.removeLayer(rutasDibujoLineLayer); }
+  rutasDibujoLineLayer = null;
+}
+function redibujarZonaEnCurso(){
+  if(!rutasMapInstance) return;
+  if(rutasDibujoLineLayer) rutasMapInstance.removeLayer(rutasDibujoLineLayer);
+  if(rutasDibujoPuntos.length < 2){
+    rutasDibujoLineLayer = null;
+    return;
+  }
+  rutasDibujoLineLayer = L.polyline(rutasDibujoPuntos, { color:'#f5a623', weight:2, dashArray:'6 4' }).addTo(rutasMapInstance);
+}
+document.getElementById('rutasCerrarZonaBtn').addEventListener('click', ()=>{
+  if(rutasDibujoPuntos.length < 3) return;
+  const poligono = rutasDibujoPuntos.slice();
+  let agregados = 0;
+  rutasMapMarkers.forEach(mm=>{
+    if(!rutasClientesSeleccionados.has(mm.codigo) && puntoEnPoligono(mm.lat, mm.lon, poligono)){
+      rutasClientesSeleccionados.add(mm.codigo);
+      mm.marker.setStyle(estiloMarcadorRuta(mm.fillColor, true));
+      agregados++;
+    }
+  });
+  if(rutasDibujoLineLayer){ rutasMapInstance.removeLayer(rutasDibujoLineLayer); rutasDibujoLineLayer = null; }
+  if(rutasDibujoCerradoLayer){ rutasMapInstance.removeLayer(rutasDibujoCerradoLayer); }
+  rutasDibujoCerradoLayer = L.polygon(poligono, { color:'#f5a623', weight:2, fillColor:'#f5a623', fillOpacity:.08 }).addTo(rutasMapInstance);
+  rutasDibujoActivo = false;
+  rutasDibujoPuntos = [];
+  document.getElementById('rutasDrawModeBtn').classList.remove('active');
+  document.getElementById('rutasDrawModeBtn').textContent = '✏️ Trazar zona';
+  actualizarBarraSeleccionRutas();
+  toast(`Zona cerrada: ${agregados} cliente(s) agregado(s) a la selección.`);
+});
 document.getElementById('rutasSelLimpiarBtn').addEventListener('click', ()=>{
   rutasClientesSeleccionados.clear();
   rutasMapMarkers.forEach(mm => mm.marker.setStyle(estiloMarcadorRuta(mm.fillColor, false)));
+  desactivarDibujoZona();
+  if(rutasDibujoCerradoLayer && rutasMapInstance){ rutasMapInstance.removeLayer(rutasDibujoCerradoLayer); rutasDibujoCerradoLayer = null; }
   actualizarBarraSeleccionRutas();
 });
 document.getElementById('rutasSelVerListaBtn').addEventListener('click', abrirListaClientesAgrupados);
@@ -3203,6 +3292,13 @@ async function renderMapaRutas(grupos, filtros){
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(rutasMapInstance);
+    // Trazar zona: cada clic sobre el mapa (fuera de un cliente) agrega un punto a la zona en curso.
+    rutasMapInstance.on('click', (e)=>{
+      if(!rutasDibujoActivo) return;
+      rutasDibujoPuntos.push([e.latlng.lat, e.latlng.lng]);
+      redibujarZonaEnCurso();
+      actualizarBarraSeleccionRutas();
+    });
   }
   // Asegura que Leaflet mida el tamaño real del contenedor antes de ubicar los puntos
   // (si se mide con tamaño 0 — por ejemplo justo al cambiar de pestaña — los puntos
@@ -3251,6 +3347,7 @@ async function renderMapaRutas(grupos, filtros){
       marker.__fillColor = fillColor;
       const popupHtml = buildRutaPopupHtml(g.codigo, cliente, groups[0]);
       marker.on('click', ()=>{
+        if(rutasDibujoActivo) return;
         if(rutasModoSeleccion){
           toggleSeleccionClienteRuta(cliente.codigo, marker, fillColor);
         } else {

@@ -395,6 +395,7 @@
   #rutasMapPanel.map-panel-fullscreen .map-legends{ flex-shrink:0; }
 
   #telemetriaMapDiv{ height:440px; border-radius:var(--radius); overflow:hidden; border:1px solid var(--border); margin-bottom:16px; background:var(--panel-2); }
+  #progDetalleMapaDiv{ height:440px; border-radius:var(--radius); overflow:hidden; border:1px solid var(--border); margin-bottom:16px; background:var(--panel-2); }
   #telemetriaMapPanel.map-panel-fullscreen{
     position:fixed; top:16px; left:16px; right:16px; bottom:16px; z-index:900;
     display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.6); overflow-y:auto;
@@ -501,15 +502,20 @@
   .bar-col .bar-vert{ width:34px; background:var(--amber); border-radius:6px 6px 0 0; transition:height .3s; min-height:2px; }
   .bar-col .bar-label{ margin-top:8px; font-size:11px; color:var(--text-dim); text-align:center; max-width:76px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-  .bar-chart-grouped{ display:flex; align-items:flex-end; gap:18px; height:220px; padding:10px 4px 0; overflow-x:auto; }
-  .bar-group-col{ display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; min-width:74px; flex-shrink:0; }
-  .bar-group{ display:flex; align-items:flex-end; gap:3px; height:100%; }
-  .bar-vert-mini{ width:16px; border-radius:5px 5px 0 0; transition:height .3s; min-height:2px; position:relative; }
-  .bar-vert-mini .mini-value{ position:absolute; top:-16px; left:50%; transform:translateX(-50%); font-size:9.5px; font-weight:700; color:var(--text); white-space:nowrap; }
+  .bar-chart-grouped{ display:flex; align-items:flex-end; gap:20px; height:240px; padding:52px 4px 0; overflow-x:auto; }
+  .bar-group-col{ display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; min-width:92px; flex-shrink:0; }
+  .bar-group{ display:flex; align-items:flex-end; gap:4px; height:100%; }
+  .bar-vert-mini{ width:15px; border-radius:4px 4px 0 0; transition:height .3s; min-height:2px; position:relative; }
+  .bar-vert-mini .mini-value{
+    position:absolute; bottom:100%; left:50%; margin-bottom:5px;
+    transform:translateX(-50%) rotate(-90deg); transform-origin:bottom center;
+    white-space:nowrap; font-size:10px; font-weight:700; color:var(--text);
+  }
   .bar-vert-mini.serie-aux{ background:var(--amber); }
   .bar-vert-mini.serie-paq{ background:#4f8fd1; }
   .bar-vert-mini.serie-par{ background:var(--green); }
-  .bar-group-col .bar-label{ margin-top:8px; font-size:11px; color:var(--text-dim); text-align:center; max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bar-vert-mini.serie-equiv{ background:#bb6bd9; }
+  .bar-group-col .bar-label{ margin-top:8px; font-size:11px; color:var(--text-dim); text-align:center; max-width:92px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .bar-legend-row{ display:flex; gap:16px; flex-wrap:wrap; margin-bottom:8px; font-size:12px; color:var(--text-dim); }
   .bar-legend-row .legend-item{ display:inline-flex; align-items:center; gap:6px; }
   .bar-legend-row .legend-dot{ width:10px; height:10px; border-radius:3px; display:inline-block; }
@@ -680,6 +686,7 @@
     <div class="nav-item" data-page="rutas"><span class="icon">🚚</span> Resumen de Rutas</div>
     <div class="nav-item" data-page="telemetria"><span class="icon">📡</span> Telemetría</div>
     <div class="nav-item" data-page="qlp"><span class="icon">👷</span> QLP</div>
+    <div class="nav-item" data-page="programacion-guardada"><span class="icon">💾</span> Programación Guardada</div>
     <div class="nav-item" data-page="historial"><span class="icon">📋</span> Historial de alertas</div>
     <div class="nav-item" data-page="maestro"><span class="icon">🗂</span> Maestro de clientes</div>
     <div class="nav-item" data-page="directorio"><span class="icon">☎</span> Importar datos</div>
@@ -930,6 +937,7 @@
           </div>
           <button type="button" id="rutasSelModeBtn" class="map-fs-btn" title="Selecciona clientes en el mapa haciendo clic sobre ellos">🔲 Agrupar clientes</button>
           <button type="button" id="rutasDrawModeBtn" class="map-fs-btn" title="Traza una zona en el mapa para agrupar a todos los clientes dentro de ella">✏️ Trazar zona</button>
+          <button type="button" id="btnGuardarProgramacion" class="map-fs-btn" title="Guarda una copia de todo lo programado (mapa y Detalle por ruta) en el módulo Programación Guardada">💾 Guardar programación</button>
           <button type="button" id="rutasMapExpandBtn" class="map-fs-btn" title="Ver el mapa en pantalla completa">⛶ Pantalla completa</button>
           <button type="button" id="rutasMapCollapseBtn" class="map-fs-btn" title="Volver al tamaño normal" style="display:none;">✕ Restaurar</button>
         </div>
@@ -1105,6 +1113,7 @@
         <span class="legend-item"><span class="legend-dot" style="background:var(--amber);"></span>Auxiliares</span>
         <span class="legend-item"><span class="legend-dot" style="background:#4f8fd1;"></span>Paquetes (Cajas)</span>
         <span class="legend-item"><span class="legend-dot" style="background:var(--green);"></span>Paradas</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#bb6bd9;"></span>Paquetes ÷ 170</span>
       </div>
       <div id="qlpChart"></div>
     </div>
@@ -1131,6 +1140,56 @@
       <div class="panel" style="margin-bottom:0;">
         <h3>Auxiliares por procedencia <span class="hint">— total del periodo cargado</span></h3>
         <div id="qlpProcedenciaChart"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAGE: PROGRAMACIÓN GUARDADA -->
+  <div class="page" id="page-programacion-guardada">
+    <h2 class="view-title">Programación Guardada</h2>
+    <div class="view-sub">Copias guardadas de "lo programado" (mapa y Detalle por ruta) desde Resumen de Rutas — usa el botón "💾 Guardar programación" allá para crear una nueva.</div>
+
+    <div class="panel">
+      <h3>Programaciones guardadas</h3>
+      <div class="route-detail-table-wrap" style="max-height:320px;">
+        <table class="route-detail-table">
+          <thead><tr>
+            <th>Guardado el</th><th class="num">Rutas</th><th class="num">Clientes</th><th class="num">Cajas</th><th>Acciones</th>
+          </tr></thead>
+          <tbody id="progGuardadaTbody"></tbody>
+        </table>
+        <div id="progGuardadaEmpty" class="route-detail-table-empty">Todavía no has guardado ninguna programación. Ve a "Resumen de Rutas" y usa el botón "💾 Guardar programación".</div>
+      </div>
+    </div>
+
+    <div id="progGuardadaDetalle" style="display:none;">
+      <div class="kpi-grid" id="progDetalleKpis"></div>
+      <div class="map-detail-row">
+        <div class="panel">
+          <h3 id="progDetalleMapaTitulo">Mapa de lo programado</h3>
+          <div id="progDetalleMapaDiv"></div>
+          <div class="map-legends">
+            <div class="map-legend">
+              <div class="map-legend-title">Leyenda — Ruta</div>
+              <div class="map-legend-items" id="progDetalleLeyenda"></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel" style="margin-bottom:0;">
+          <div class="filter-row" style="margin-bottom:10px;">
+            <h3 style="margin:0;">Detalle por ruta</h3>
+            <button type="button" class="map-fs-btn" id="btnExportarProgGuardada" style="margin-left:auto;">Exportar Excel</button>
+          </div>
+          <div class="route-detail-table-wrap" style="max-height:420px;">
+            <table class="route-detail-table">
+              <thead><tr>
+                <th>Ruta</th><th>Transp.</th><th>Chofer</th><th>Horas</th><th>Distancia</th><th>Capacidad</th>
+                <th class="num">Aux.</th><th class="num">Cajas</th><th class="num">Prog.</th><th class="num">Alertas</th>
+              </tr></thead>
+              <tbody id="progDetalleTbody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -2116,6 +2175,7 @@ document.querySelectorAll('.nav-item').forEach(item=>{
     if(item.dataset.page === 'usuarios') renderUsuarios();
     if(item.dataset.page === 'telemetria') iniciarTelemetria();
     if(item.dataset.page === 'qlp') renderQlp();
+    if(item.dataset.page === 'programacion-guardada') iniciarProgramacionGuardada();
   });
 });
 
@@ -4243,10 +4303,13 @@ function renderQlpChart(dias){
   const maxAux = Math.max(...dias.map(d=>d.auxiliares), 1);
   const maxPaq = Math.max(...dias.map(d=>d.paquetes||0), 1);
   const maxPar = Math.max(...dias.map(d=>d.paradas||0), 1);
+  const maxEquiv = Math.max(...dias.map(d=>(d.paquetes||0)/170), 1);
   el.innerHTML = `<div class="bar-chart-grouped">${dias.map(d=>{
+    const equiv = (d.paquetes||0)/170;
     const pctAux = Math.max(Math.round((d.auxiliares/maxAux)*100), 3);
     const pctPaq = Math.max(Math.round(((d.paquetes||0)/maxPaq)*100), 3);
     const pctPar = Math.max(Math.round(((d.paradas||0)/maxPar)*100), 3);
+    const pctEquiv = Math.max(Math.round((equiv/maxEquiv)*100), 3);
     const etiquetaCorta = d.fecha.length===10 ? d.fecha.slice(5) : d.fecha;
     return `
       <div class="bar-group-col">
@@ -4254,6 +4317,7 @@ function renderQlpChart(dias){
           <div class="bar-vert-mini serie-aux" style="height:${pctAux}%;"><span class="mini-value">${d.auxiliares}</span></div>
           <div class="bar-vert-mini serie-paq" style="height:${pctPaq}%;"><span class="mini-value">${Math.round(d.paquetes||0)}</span></div>
           <div class="bar-vert-mini serie-par" style="height:${pctPar}%;"><span class="mini-value">${Math.round(d.paradas||0)}</span></div>
+          <div class="bar-vert-mini serie-equiv" style="height:${pctEquiv}%;"><span class="mini-value">${equiv.toFixed(1)}</span></div>
         </div>
         <div class="bar-label" title="${escapeHtml(d.fecha)}">${escapeHtml(etiquetaCorta)}</div>
       </div>
@@ -4316,6 +4380,193 @@ function renderQlp(){
   renderQlpChart(dias);
   renderQlpTabla(dias);
   renderQlpProcedencia(dias);
+}
+
+/* ============ PROGRAMACIÓN GUARDADA (copias de "lo programado": mapa + Detalle por ruta) ============ */
+let programacionesGuardadas = [];
+let progDetalleActualId = null;
+let progMapInstance = null;
+let progMapMarkers = [];
+const LS_PROGRAMACIONES_KEY = 'rechazos_programaciones_guardadas_v1';
+
+async function loadProgramacionesGuardadas(){
+  try{
+    const arr = await idbGet('programaciones_guardadas');
+    if(arr !== undefined){ programacionesGuardadas = arr; return; }
+  }catch(e){ /* seguir con localStorage */ }
+  try{
+    const raw = localStorage.getItem(LS_PROGRAMACIONES_KEY);
+    programacionesGuardadas = raw ? JSON.parse(raw) : [];
+  }catch(e){ programacionesGuardadas = []; console.warn('No se pudieron leer las programaciones guardadas', e); }
+}
+async function saveProgramacionesGuardadas(){
+  // Se guardan como máximo las 30 más recientes, para no llenar el almacenamiento del navegador.
+  programacionesGuardadas = programacionesGuardadas
+    .sort((a,b)=> b.guardadoEn < a.guardadoEn ? -1 : 1)
+    .slice(0, 30);
+  try{
+    await idbSet('programaciones_guardadas', programacionesGuardadas);
+  }catch(e){
+    console.warn('No se pudo guardar en IndexedDB, se intenta localStorage', e);
+    try{ localStorage.setItem(LS_PROGRAMACIONES_KEY, JSON.stringify(programacionesGuardadas)); }
+    catch(e2){ toast('No se pudo guardar la programación (puede que sea muy grande para este navegador).'); console.warn(e2); }
+  }
+}
+
+function construirPuntosProgramados(grupos){
+  const puntos = [];
+  grupos.forEach(g=>{
+    g.clientes.forEach(cliente=>{
+      const groups = maestroIndex.get(cliente.codigo);
+      if(!groups || !groups.length) return;
+      const link = mapsLinkFromUbicacion(groups[0].ubicacion);
+      const m = link && /q=(-?\d+\.?\d*),(-?\d+\.?\d*)/.exec(link);
+      if(!m) return;
+      puntos.push({ codigo:cliente.codigo, nombre:cliente.nombre||'', ruta:g.codigo, lat:parseFloat(m[1]), lon:parseFloat(m[2]) });
+    });
+  });
+  return puntos;
+}
+
+async function guardarProgramacionActual(){
+  if(!rutasChecklistAgrupado.length){ toast('No hay checklist cargado — no hay nada programado para guardar.'); return; }
+  const filas = calcularFilasRutas(rutasChecklistAgrupado);
+  const puntos = construirPuntosProgramados(rutasChecklistAgrupado);
+  const snapshot = {
+    id: 'prog_'+Date.now(),
+    guardadoEn: new Date().toISOString(),
+    filas, puntos,
+    totalRutas: filas.length,
+    totalClientes: filas.reduce((s,f)=>s+f.clientes,0),
+    totalCajas: Math.round(filas.reduce((s,f)=>s+f.cajas,0)*100)/100
+  };
+  programacionesGuardadas.push(snapshot);
+  await saveProgramacionesGuardadas();
+  toast(`Programación guardada: ${snapshot.totalRutas} ruta(s), ${snapshot.totalClientes} cliente(s).`);
+}
+document.getElementById('btnGuardarProgramacion').addEventListener('click', guardarProgramacionActual);
+
+function renderProgGuardadaLista(){
+  const tbody = document.getElementById('progGuardadaTbody');
+  const emptyEl = document.getElementById('progGuardadaEmpty');
+  const ordenadas = [...programacionesGuardadas].sort((a,b)=> b.guardadoEn < a.guardadoEn ? -1 : 1);
+  if(!ordenadas.length){
+    tbody.innerHTML = '';
+    emptyEl.style.display = 'block';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  tbody.innerHTML = ordenadas.map(p => `
+    <tr>
+      <td><b>${escapeHtml(formatFechaHora(p.guardadoEn.slice(0,16)))}</b></td>
+      <td class="num">${p.totalRutas}</td>
+      <td class="num">${p.totalClientes}</td>
+      <td class="num">${p.totalCajas.toLocaleString('es-PE')}</td>
+      <td style="white-space:nowrap;">
+        <span class="btn btn-secondary" style="padding:5px 10px; font-size:11px;" data-ver-prog="${escapeHtml(p.id)}">Ver</span>
+        <span class="btn-danger btn" style="padding:5px 10px; font-size:11px;" data-del-prog="${escapeHtml(p.id)}">Eliminar</span>
+      </td>
+    </tr>
+  `).join('');
+  tbody.querySelectorAll('[data-ver-prog]').forEach(btn=>{
+    btn.addEventListener('click', ()=> verProgramacionGuardada(btn.dataset.verProg));
+  });
+  tbody.querySelectorAll('[data-del-prog]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm('¿Eliminar esta programación guardada?')) return;
+      programacionesGuardadas = programacionesGuardadas.filter(p => p.id !== btn.dataset.delProg);
+      await saveProgramacionesGuardadas();
+      if(progDetalleActualId === btn.dataset.delProg){
+        progDetalleActualId = null;
+        document.getElementById('progGuardadaDetalle').style.display = 'none';
+      }
+      renderProgGuardadaLista();
+      toast('Programación eliminada.');
+    });
+  });
+}
+
+async function verProgramacionGuardada(id){
+  const p = programacionesGuardadas.find(x => x.id === id);
+  if(!p) return;
+  progDetalleActualId = id;
+  document.getElementById('progGuardadaDetalle').style.display = 'block';
+  document.getElementById('progDetalleMapaTitulo').textContent = `Mapa de lo programado — guardado el ${formatFechaHora(p.guardadoEn.slice(0,16))}`;
+
+  document.getElementById('progDetalleKpis').innerHTML = `
+    <div class="kpi-card"><div class="kpi-label">Guardado el</div><div class="kpi-value" style="font-size:16px;">${escapeHtml(formatFechaHora(p.guardadoEn.slice(0,16)))}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Rutas</div><div class="kpi-value amber">${p.totalRutas}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Clientes programados</div><div class="kpi-value green">${p.totalClientes}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Cajas</div><div class="kpi-value red">${p.totalCajas.toLocaleString('es-PE')}</div></div>
+  `;
+
+  const tbody = document.getElementById('progDetalleTbody');
+  tbody.innerHTML = p.filas.map(f => `
+    <tr>
+      <td><b>${escapeHtml(f.codigo)}</b></td>
+      <td>${escapeHtml(f.transporte||'—')}</td>
+      <td>${escapeHtml(f.chofer||'—')}</td>
+      <td>${escapeHtml(f.horas||'—')}</td>
+      <td>${f.distancia!==null && f.distancia!==undefined ? f.distancia+' km' : '—'}</td>
+      <td>${f.capacidad!==null && f.capacidad!==undefined ? f.capacidad+'%' : '—'}</td>
+      <td class="num">${f.auxiliares !== null ? f.auxiliares : '—'}</td>
+      <td class="num">${f.cajas.toLocaleString('es-PE')}</td>
+      <td class="num">${f.clientes}</td>
+      <td class="num">${f.alertas ? `<span class="badge estado-warn">${f.alertas}</span>` : '0'}</td>
+    </tr>
+  `).join('');
+
+  await renderMapaProgramacionGuardada(p);
+
+  document.getElementById('btnExportarProgGuardada').onclick = ()=>{
+    const headers = ['Ruta','Transporte','Chofer','Horas','Distancia','Capacidad','Auxiliares','Cajas','Programados','Alertas'];
+    const rows = p.filas.map(f => [f.codigo,f.transporte,f.chofer,f.horas,f.distancia,f.capacidad,f.auxiliares,f.cajas,f.clientes,f.alertas]);
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Programacion guardada');
+    XLSX.writeFile(wb, `programacion_guardada_${p.guardadoEn.slice(0,10)}.xlsx`);
+    toast('Descargando Excel…');
+  };
+}
+
+async function renderMapaProgramacionGuardada(p){
+  await ensureLeafletLoaded();
+  const mapEl = document.getElementById('progDetalleMapaDiv');
+  if(!progMapInstance){
+    progMapInstance = L.map(mapEl, {zoomControl:false}).setView([-12.05, -77.05], 11);
+    L.control.zoom({position:'bottomleft'}).addTo(progMapInstance);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(progMapInstance);
+  }
+  progMapInstance.invalidateSize();
+  progMapMarkers.forEach(m => progMapInstance.removeLayer(m));
+  progMapMarkers = [];
+
+  const rutasUnicas = Array.from(new Set(p.puntos.map(pt=>pt.ruta)));
+  const bounds = [];
+  p.puntos.forEach(pt=>{
+    const fillColor = colorForRuta(pt.ruta, rutasUnicas);
+    const marker = L.circleMarker([pt.lat, pt.lon], { radius:6, color:'#000000', weight:1.2, fillColor, fillOpacity:.9 })
+      .bindPopup(`<b>${escapeHtml(pt.ruta)}</b><br>${escapeHtml(pt.codigo)} — ${escapeHtml(pt.nombre)}`);
+    marker.addTo(progMapInstance);
+    progMapMarkers.push(marker);
+    bounds.push([pt.lat, pt.lon]);
+  });
+  document.getElementById('progDetalleLeyenda').innerHTML = rutasUnicas.map(r => `
+    <span class="legend-item"><span class="legend-dot" style="background:${colorForRuta(r, rutasUnicas)}"></span>${escapeHtml(r)}</span>
+  `).join('');
+  setTimeout(()=>{
+    progMapInstance.invalidateSize();
+    if(bounds.length) progMapInstance.fitBounds(bounds, {padding:[24,24]});
+  }, 150);
+}
+
+async function iniciarProgramacionGuardada(){
+  await loadProgramacionesGuardadas();
+  renderProgGuardadaLista();
+  document.getElementById('progGuardadaDetalle').style.display = 'none';
+  progDetalleActualId = null;
 }
 
 function renderDashboard(){

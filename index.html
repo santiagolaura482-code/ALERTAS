@@ -2736,22 +2736,11 @@ async function ensureLeafletLoaded(){
     await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js');
   }
 }
-/* Agrupamiento visual estilo BatchGeo: puntos cercanos se agrupan en una burbuja con
-   el número de clientes; al acercar el zoom (o hacer clic) se separan. */
-async function ensureMarkerClusterLoaded(){
-  await ensureLeafletLoaded();
-  if(!window.L.markerClusterGroup){
-    loadStylesheetOnce('https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css');
-    loadStylesheetOnce('https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css');
-    await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js');
-  }
-}
 
 let rutasChecklistAgrupado = [];
 let rutasFilasActuales = [];
 let rutasMapInstance = null;
 let rutasMapMarkers = [];
-let rutasClusterGroup = null;
 const rutasSalaFilterState = new Set();
 const rutasRutaFilterState = new Set();
 let rutasSort = { column:null, direction:'asc' };
@@ -3284,7 +3273,7 @@ function buildRutaPopupHtml(rutaCodigo, cliente, maestroGroup){
   `;
 }
 async function renderMapaRutas(grupos, filtros){
-  await ensureMarkerClusterLoaded();
+  await ensureLeafletLoaded();
   const mapEl = document.getElementById('rutasMapDiv');
   if(!rutasMapInstance){
     rutasMapInstance = L.map(mapEl, {zoomControl:false}).setView([-12.05, -77.05], 11);
@@ -3305,24 +3294,7 @@ async function renderMapaRutas(grupos, filtros){
   // pueden quedar mal ubicados o invisibles).
   rutasMapInstance.invalidateSize();
 
-  if(rutasClusterGroup){
-    rutasMapInstance.removeLayer(rutasClusterGroup);
-  }
-  rutasClusterGroup = L.markerClusterGroup({
-    showCoverageOnHover: false,
-    spiderfyOnEveryZoom: false,
-    maxClusterRadius: 60
-  });
-  rutasClusterGroup.on('clusterclick', (e)=>{
-    if(rutasModoSeleccion){
-      // En modo selección, un clic en una burbuja agrupa de una vez a todos sus clientes.
-      const codigos = e.layer.getAllChildMarkers().map(m => m.__codigo);
-      codigos.forEach(c => rutasClientesSeleccionados.add(c));
-      e.layer.getAllChildMarkers().forEach(m => m.setStyle(estiloMarcadorRuta(m.__fillColor, true)));
-      actualizarBarraSeleccionRutas();
-    }
-    // Si no está en modo selección, se deja el comportamiento normal de Leaflet (acercar/expandir).
-  });
+  rutasMapMarkers.forEach(mm => rutasMapInstance.removeLayer(mm.marker));
   rutasMapMarkers = [];
 
   const rutasVisibles = grupos.filter(g => !filtros.rutas.size || filtros.rutas.has(g.codigo))
@@ -3354,13 +3326,11 @@ async function renderMapaRutas(grupos, filtros){
           marker.bindPopup(popupHtml).openPopup();
         }
       });
-      rutasClusterGroup.addLayer(marker);
+      marker.addTo(rutasMapInstance);
       rutasMapMarkers.push({marker, lat, lon, codigo:cliente.codigo, fillColor});
       bounds.push([lat, lon]);
     });
   });
-
-  rutasMapInstance.addLayer(rutasClusterGroup);
 
   document.getElementById('rutasLeyenda').innerHTML = rutasUnicas.map(r => `
     <span class="legend-item"><span class="legend-dot" style="background:${colorForRuta(r, rutasUnicas)}"></span>${escapeHtml(r)}</span>

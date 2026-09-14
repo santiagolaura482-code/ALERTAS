@@ -3189,20 +3189,49 @@ function abrirListaClientesAgrupados(){
     const ruta = ventasRec ? ventasRec.ruta : '';
     const ev = group ? (Array.from(group.vSet)[0] || '') : '';
     const supervisor = group ? (group.s || '') : '';
-    return { codigo, nombre, ruta, ev, supervisor, porUm: cantidadPorUmCliente(codigo) };
+    const porUm = cantidadPorUmCliente(codigo);
+    const total = Object.values(porUm).reduce((s,v)=> s+(v||0), 0);
+    return { codigo, nombre, ruta, ev, supervisor, porUm, total };
   });
   const ums = Array.from(new Set(detalle.flatMap(d => Object.keys(d.porUm)))).sort();
 
-  const headHtml = `<th>Código</th><th>Nombre</th><th>Ruta</th><th>EV</th><th>Supervisor de Ventas</th>` + ums.map(u=>`<th class="num">${escapeHtml(u)}</th>`).join('') + `<th class="num">Total</th>`;
-  const bodyHtml = detalle.map(d=>{
-    let total = 0;
+  const listaSort = { columna:null, direccion:'asc' };
+  function valorOrdenable(d, columna){
+    if(columna.startsWith('um:')) return d.porUm[columna.slice(3)] || 0;
+    if(columna === 'total') return d.total;
+    const v = d[columna];
+    return typeof v === 'string' ? v.toLowerCase() : (v || 0);
+  }
+  function ordenarDetalle(){
+    if(!listaSort.columna) return detalle;
+    const mult = listaSort.direccion === 'asc' ? 1 : -1;
+    return [...detalle].sort((a,b)=>{
+      const va = valorOrdenable(a, listaSort.columna), vb = valorOrdenable(b, listaSort.columna);
+      if(va < vb) return -1*mult;
+      if(va > vb) return 1*mult;
+      return 0;
+    });
+  }
+  function filaHtml(d){
     const celdas = ums.map(u=>{
       const v = d.porUm[u] || 0;
-      total += v;
       return `<td class="num">${v ? Math.round(v*100)/100 : '—'}</td>`;
     }).join('');
-    return `<tr><td><b>${escapeHtml(d.codigo)}</b></td><td>${escapeHtml(d.nombre)}</td><td>${escapeHtml(d.ruta||'—')}</td><td>${escapeHtml(d.ev||'—')}</td><td>${escapeHtml(d.supervisor||'—')}</td>${celdas}<td class="num"><b>${Math.round(total*100)/100}</b></td></tr>`;
-  }).join('');
+    return `<tr><td><b>${escapeHtml(d.codigo)}</b></td><td>${escapeHtml(d.nombre)}</td><td>${escapeHtml(d.ruta||'—')}</td><td>${escapeHtml(d.ev||'—')}</td><td>${escapeHtml(d.supervisor||'—')}</td>${celdas}<td class="num"><b>${Math.round(d.total*100)/100}</b></td></tr>`;
+  }
+  function renderTbody(){
+    document.getElementById('listaAgrupadaTbody').innerHTML = ordenarDetalle().map(filaHtml).join('');
+  }
+
+  const columnas = [
+    {campo:'codigo', label:'Código'}, {campo:'nombre', label:'Nombre'}, {campo:'ruta', label:'Ruta'},
+    {campo:'ev', label:'EV'}, {campo:'supervisor', label:'Supervisor de Ventas'},
+    ...ums.map(u=>({campo:'um:'+u, label:u, num:true})),
+    {campo:'total', label:'Total', num:true}
+  ];
+  const headHtml = columnas.map(c=>
+    `<th class="sortable${c.num?' num':''}" data-sort="${escapeHtml(c.campo)}">${escapeHtml(c.label)}<span class="sort-arrow"></span></th>`
+  ).join('');
 
   openModal(`
     <div class="modal-header">
@@ -3211,9 +3240,9 @@ function abrirListaClientesAgrupados(){
     </div>
     <div class="modal-body">
       <div class="route-detail-table-wrap" style="max-height:420px;">
-        <table class="route-detail-table">
+        <table class="route-detail-table" id="listaAgrupadaTable">
           <thead><tr>${headHtml}</tr></thead>
-          <tbody>${bodyHtml}</tbody>
+          <tbody id="listaAgrupadaTbody"></tbody>
         </table>
       </div>
     </div>
@@ -3223,12 +3252,22 @@ function abrirListaClientesAgrupados(){
       <button class="btn" id="btnExportarListaAgrupada">Exportar Excel</button>
     </div>
   `);
+  renderTbody();
+  document.querySelectorAll('#listaAgrupadaTable th.sortable').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const campo = th.dataset.sort;
+      if(listaSort.columna === campo) listaSort.direccion = listaSort.direccion === 'asc' ? 'desc' : 'asc';
+      else { listaSort.columna = campo; listaSort.direccion = 'asc'; }
+      document.querySelectorAll('#listaAgrupadaTable .sort-arrow').forEach(s=> s.textContent='');
+      th.querySelector('.sort-arrow').textContent = listaSort.direccion === 'asc' ? '▲' : '▼';
+      renderTbody();
+    });
+  });
   document.getElementById('btnExportarListaAgrupada').addEventListener('click', ()=>{
     const headers = ['Codigo','Nombre','Ruta','EV','Supervisor de Ventas', ...ums, 'Total'];
-    const rows = detalle.map(d=>{
-      let total = 0;
-      const vals = ums.map(u=>{ const v = d.porUm[u]||0; total += v; return Math.round(v*100)/100; });
-      return [d.codigo, d.nombre, d.ruta||'', d.ev||'', d.supervisor||'', ...vals, Math.round(total*100)/100];
+    const rows = ordenarDetalle().map(d=>{
+      const vals = ums.map(u=> Math.round((d.porUm[u]||0)*100)/100);
+      return [d.codigo, d.nombre, d.ruta||'', d.ev||'', d.supervisor||'', ...vals, Math.round(d.total*100)/100];
     });
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const wb = XLSX.utils.book_new();
@@ -3237,7 +3276,7 @@ function abrirListaClientesAgrupados(){
     toast('Descargando Excel…');
   });
   document.getElementById('btnCopiarListaAgrupada').addEventListener('click', ()=>{
-    const texto = detalle.map(d=>{
+    const texto = ordenarDetalle().map(d=>{
       const partesUm = ums.map(u=> `${u}: ${Math.round((d.porUm[u]||0)*100)/100}`).join(', ');
       return `Código: ${d.codigo} | Nombre: ${d.nombre} | Ruta: ${d.ruta||'—'} | EV: ${d.ev||'—'} | Supervisor de Ventas: ${d.supervisor||'—'} | ${partesUm}`;
     }).join('\n');

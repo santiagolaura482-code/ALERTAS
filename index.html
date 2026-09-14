@@ -3184,13 +3184,16 @@ function abrirListaClientesAgrupados(){
   const detalle = codigos.map(codigo=>{
     const ventasRec = ventasIndex.get(codigo);
     const groups = maestroIndex.get(codigo);
-    const nombre = (ventasRec && ventasRec.solicitante) || (groups && groups[0] && groups[0].n) || '';
+    const group = groups && groups[0];
+    const nombre = (ventasRec && ventasRec.solicitante) || (group && group.n) || '';
     const ruta = ventasRec ? ventasRec.ruta : '';
-    return { codigo, nombre, ruta, porUm: cantidadPorUmCliente(codigo) };
+    const ev = group ? (Array.from(group.vSet)[0] || '') : '';
+    const supervisor = group ? (group.s || '') : '';
+    return { codigo, nombre, ruta, ev, supervisor, porUm: cantidadPorUmCliente(codigo) };
   });
   const ums = Array.from(new Set(detalle.flatMap(d => Object.keys(d.porUm)))).sort();
 
-  const headHtml = `<th>Código</th><th>Nombre</th><th>Ruta</th>` + ums.map(u=>`<th class="num">${escapeHtml(u)}</th>`).join('') + `<th class="num">Total</th>`;
+  const headHtml = `<th>Código</th><th>Nombre</th><th>Ruta</th><th>EV</th><th>Supervisor de Ventas</th>` + ums.map(u=>`<th class="num">${escapeHtml(u)}</th>`).join('') + `<th class="num">Total</th>`;
   const bodyHtml = detalle.map(d=>{
     let total = 0;
     const celdas = ums.map(u=>{
@@ -3198,7 +3201,7 @@ function abrirListaClientesAgrupados(){
       total += v;
       return `<td class="num">${v ? Math.round(v*100)/100 : '—'}</td>`;
     }).join('');
-    return `<tr><td><b>${escapeHtml(d.codigo)}</b></td><td>${escapeHtml(d.nombre)}</td><td>${escapeHtml(d.ruta||'—')}</td>${celdas}<td class="num"><b>${Math.round(total*100)/100}</b></td></tr>`;
+    return `<tr><td><b>${escapeHtml(d.codigo)}</b></td><td>${escapeHtml(d.nombre)}</td><td>${escapeHtml(d.ruta||'—')}</td><td>${escapeHtml(d.ev||'—')}</td><td>${escapeHtml(d.supervisor||'—')}</td>${celdas}<td class="num"><b>${Math.round(total*100)/100}</b></td></tr>`;
   }).join('');
 
   openModal(`
@@ -3221,11 +3224,11 @@ function abrirListaClientesAgrupados(){
     </div>
   `);
   document.getElementById('btnExportarListaAgrupada').addEventListener('click', ()=>{
-    const headers = ['Codigo','Nombre','Ruta', ...ums, 'Total'];
+    const headers = ['Codigo','Nombre','Ruta','EV','Supervisor de Ventas', ...ums, 'Total'];
     const rows = detalle.map(d=>{
       let total = 0;
       const vals = ums.map(u=>{ const v = d.porUm[u]||0; total += v; return Math.round(v*100)/100; });
-      return [d.codigo, d.nombre, d.ruta||'', ...vals, Math.round(total*100)/100];
+      return [d.codigo, d.nombre, d.ruta||'', d.ev||'', d.supervisor||'', ...vals, Math.round(total*100)/100];
     });
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const wb = XLSX.utils.book_new();
@@ -3236,7 +3239,7 @@ function abrirListaClientesAgrupados(){
   document.getElementById('btnCopiarListaAgrupada').addEventListener('click', ()=>{
     const texto = detalle.map(d=>{
       const partesUm = ums.map(u=> `${u}: ${Math.round((d.porUm[u]||0)*100)/100}`).join(', ');
-      return `Código: ${d.codigo} | Nombre: ${d.nombre} | Ruta: ${d.ruta||'—'} | ${partesUm}`;
+      return `Código: ${d.codigo} | Nombre: ${d.nombre} | Ruta: ${d.ruta||'—'} | EV: ${d.ev||'—'} | Supervisor de Ventas: ${d.supervisor||'—'} | ${partesUm}`;
     }).join('\n');
     copyToClipboard(texto).then(()=> toast('Copiado al portapapeles.'), ()=> toast('No se pudo copiar.'));
   });

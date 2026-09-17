@@ -4432,9 +4432,11 @@ async function guardarProgramacionActual(){
   if(!rutasChecklistAgrupado.length){ toast('No hay checklist cargado — no hay nada programado para guardar.'); return; }
   const filas = calcularFilasRutas(rutasChecklistAgrupado);
   const puntos = construirPuntosProgramados(rutasChecklistAgrupado);
+  const fechasChecklist = Array.from(new Set(checklist.map(r=>r.fecha).filter(Boolean)));
   const snapshot = {
     id: 'prog_'+Date.now(),
     guardadoEn: new Date().toISOString(),
+    fechaChecklist: fechasChecklist.join(', ') || '—',
     filas, puntos,
     totalRutas: filas.length,
     totalClientes: filas.reduce((s,f)=>s+f.clientes,0),
@@ -4458,7 +4460,7 @@ function renderProgGuardadaLista(){
   emptyEl.style.display = 'none';
   tbody.innerHTML = ordenadas.map(p => `
     <tr>
-      <td><b>${escapeHtml(formatFechaHora(p.guardadoEn.slice(0,16)))}</b></td>
+      <td><b>${escapeHtml(p.fechaChecklist || formatFechaHora(p.guardadoEn.slice(0,16)))}</b></td>
       <td class="num">${p.totalRutas}</td>
       <td class="num">${p.totalClientes}</td>
       <td class="num">${p.totalCajas.toLocaleString('es-PE')}</td>
@@ -4491,10 +4493,11 @@ async function verProgramacionGuardada(id){
   if(!p) return;
   progDetalleActualId = id;
   document.getElementById('progGuardadaDetalle').style.display = 'block';
-  document.getElementById('progDetalleMapaTitulo').textContent = `Mapa de lo programado — guardado el ${formatFechaHora(p.guardadoEn.slice(0,16))}`;
+  const fechaMostrar = p.fechaChecklist || formatFechaHora(p.guardadoEn.slice(0,16));
+  document.getElementById('progDetalleMapaTitulo').textContent = `Mapa de lo programado — ${fechaMostrar}`;
 
   document.getElementById('progDetalleKpis').innerHTML = `
-    <div class="kpi-card"><div class="kpi-label">Guardado el</div><div class="kpi-value" style="font-size:16px;">${escapeHtml(formatFechaHora(p.guardadoEn.slice(0,16)))}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Guardado el</div><div class="kpi-value" style="font-size:16px;">${escapeHtml(fechaMostrar)}</div></div>
     <div class="kpi-card"><div class="kpi-label">Rutas</div><div class="kpi-value amber">${p.totalRutas}</div></div>
     <div class="kpi-card"><div class="kpi-label">Clientes programados</div><div class="kpi-value green">${p.totalClientes}</div></div>
     <div class="kpi-card"><div class="kpi-label">Cajas</div><div class="kpi-value red">${p.totalCajas.toLocaleString('es-PE')}</div></div>
@@ -4524,7 +4527,7 @@ async function verProgramacionGuardada(id){
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Programacion guardada');
-    XLSX.writeFile(wb, `programacion_guardada_${p.guardadoEn.slice(0,10)}.xlsx`);
+    XLSX.writeFile(wb, `programacion_guardada_${(p.fechaChecklist||p.guardadoEn.slice(0,10)).replace(/[,\s]+/g,'_')}.xlsx`);
     toast('Descargando Excel…');
   };
 }

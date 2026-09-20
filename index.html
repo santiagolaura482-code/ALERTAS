@@ -964,6 +964,7 @@
         <div class="filter-row" style="margin-bottom:10px;">
           <h3 style="margin:0;">Detalle por ruta</h3>
           <button type="button" id="rutasAuxOpenBtn" class="map-fs-btn" style="margin-left:auto;">👷 Auxiliares</button>
+          <button type="button" id="btnExportarDetalleRuta" class="map-fs-btn">⬇ Exportar Excel</button>
         </div>
         <p style="font-size:11.5px; color:var(--text-dim); margin:0 0 10px 0;">Haz clic en una fila para verla en el mapa.</p>
         <div class="route-detail-table-wrap" style="height:440px; overflow-y:auto; overflow-x:auto;">
@@ -3460,9 +3461,16 @@ async function renderMapaRutas(grupos, filtros){
   if(!rutasMapInstance){
     rutasMapInstance = L.map(mapEl, {zoomControl:false}).setView([-12.05, -77.05], 11);
     L.control.zoom({position:'bottomleft'}).addTo(rutasMapInstance);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const capaCalles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(rutasMapInstance);
+    // Capa de relieve (curvas de nivel y sombreado de altura) — para ver de un vistazo
+    // si una zona es cerro. Se ofrece como alternativa a la capa de calles normal.
+    const capaRelieve = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+      attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)',
+      maxZoom: 17
+    });
+    L.control.layers({ 'Calles': capaCalles, 'Relieve (altura)': capaRelieve }, null, {position:'topright'}).addTo(rutasMapInstance);
     // Trazar zona: cada clic sobre el mapa (fuera de un cliente) agrega un punto a la zona en curso.
     rutasMapInstance.on('click', (e)=>{
       if(!rutasDibujoActivo) return;
@@ -3629,20 +3637,29 @@ document.getElementById('rutasClearAuxBtn').addEventListener('click', ()=>{
   aplicarFiltrosRutas();
   toast('Auxiliares borrados.');
 });
-document.getElementById('rutasExportBtn').addEventListener('click', ()=>{
+function exportarDetalleRutaExcel(){
   if(!rutasFilasActuales.length){ toast('No hay rutas para exportar.'); return; }
-  const headers = ['Ruta','Transporte','Chofer','Teléfono','Auxiliares','Cajas','Programados','Alertas'];
-  const rows = rutasFilasActuales.map(f => [f.codigo,f.transporte,f.chofer,f.telefono,f.auxiliares,f.cajas,f.clientes,f.alertas]);
+  const headers = ['Ruta','Transporte','Chofer','Horas','Distancia (km)','Capacidad (%)','Auxiliares','Cajas','Programados','Alertas'];
+  const rows = rutasFilasActuales.map(f => [
+    f.codigo, f.transporte, f.chofer,
+    f.horas !== null ? f.horas : '',
+    f.distancia !== null && f.distancia !== undefined ? f.distancia : '',
+    f.capacidad !== null && f.capacidad !== undefined ? f.capacidad : '',
+    f.auxiliares !== null ? f.auxiliares : '',
+    f.cajas, f.clientes, f.alertas
+  ]);
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Resumen de Rutas');
   XLSX.writeFile(wb, `resumen_rutas_${todayISO()}.xlsx`);
   toast('Descargando Excel…');
-});
+}
+document.getElementById('rutasExportBtn').addEventListener('click', exportarDetalleRutaExcel);
+document.getElementById('btnExportarDetalleRuta').addEventListener('click', exportarDetalleRutaExcel);
 document.getElementById('rutasViewTextBtn').addEventListener('click', ()=>{
   if(!rutasFilasActuales.length){ toast('No hay rutas para mostrar.'); return; }
   const texto = rutasFilasActuales.map(f =>
-    `Ruta: ${f.codigo} | Transporte: ${f.transporte} | Chofer: ${f.chofer||'—'} | Teléfono: ${f.telefono||'—'} | Auxiliares: ${f.auxiliares ?? '—'} | Cajas: ${f.cajas} | Programados: ${f.clientes} | Alertas: ${f.alertas}`
+    `Ruta: ${f.codigo} | Transporte: ${f.transporte} | Chofer: ${f.chofer||'—'} | Horas: ${f.horas||'—'} | Distancia: ${f.distancia??'—'} km | Capacidad: ${f.capacidad??'—'}% | Auxiliares: ${f.auxiliares ?? '—'} | Cajas: ${f.cajas} | Programados: ${f.clientes} | Alertas: ${f.alertas}`
   ).join('\n');
   openModal(`
     <div class="modal-header">
